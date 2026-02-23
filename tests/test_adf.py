@@ -3,7 +3,6 @@ import sys
 import os
 import pytest
 
-# Add 'src' to the path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 
 from core.adf import adf_to_text, plain_to_adf, adf_with_code_block, adf_extract_codeblocks
@@ -38,7 +37,6 @@ def test_adf_extract_codeblocks():
     """Tests extracting Gherkin code blocks from ADF."""
     adf = adf_with_code_block("Test Steps", "Given a user\nWhen...")
     
-    # Add another paragraph
     adf["content"].append({"type": "paragraph", "content": [{"type": "text", "text": "Some other text"}]})
     
     blocks = adf_extract_codeblocks(adf)

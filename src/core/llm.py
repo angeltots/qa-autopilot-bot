@@ -1,290 +1,186 @@
 # src/core/llm.py
-
 import os
-import re
 import json
 import logging
-import time
-from typing import List, Dict, Tuple, Any, Optional
+from typing import List, Dict, Tuple, Any
 
-# Google Vertex AI SDK
-try:
-    import vertexai
-    from vertexai.generative_models import (
-        GenerativeModel,
-        HarmCategory,
-        HarmBlockThreshold,
-        SafetySetting,
-    )
-    from google.api_core import exceptions as google_exceptions
-
-    PROJECT_ID: Optional[str] = os.getenv("GOOGLE_CLOUD_PROJECT_ID")
-    LOCATION: str = os.getenv("GOOGLE_CLOUD_REGION", "us-central1")
-
-    if PROJECT_ID:
-        vertexai.init(project=PROJECT_ID, location=LOCATION)
-except ImportError:
-    vertexai = None
-    PROJECT_ID = None
-    google_exceptions = None
-
-from .gherkin import sanitize_title, make_signature
+from google import genai
+from google.genai import types
 
 log = logging.getLogger(__name__)
 
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT_ID")
+LOCATION = os.getenv("GOOGLE_CLOUD_REGION", "us-central1")
+
+client = None
+provider = "unknown"
+
+try:
+    if GOOGLE_API_KEY:
+        client = genai.Client(api_key=GOOGLE_API_KEY)
+        provider = "google-ai-studio"
+    elif PROJECT_ID:
+        client = genai.Client(vertexai=True, project=PROJECT_ID, location=LOCATION)
+        provider = "vertex-ai"
+    else:
+        log.warning("No hay credenciales de IA configuradas en el .env")
+except Exception as e:
+    log.error(f"Faltan librerías o credenciales de IA: {e}")
 
 SYS_MSG_GENERATE_SCENARIOS = (
-    "You are a highly experienced Senior QA Analyst. Your task is to analyze the full context of a user story from Jira and create a comprehensive set of test cases. You must be rigorous and cover all requirements provided.\n\n"
-    "**YOUR RULES:**\n"
-    "1.  **HOLISTIC ANALYSIS:** You will be given a context with multiple sections like 'Scenarios', 'Copys', and 'Amplitude'. You MUST treat every section as a source of requirements and create test cases for ALL of them. Do not stop after processing only the 'Scenarios' section.\n"
-    "2.  **GHERKIN (ENGLISH):** All test cases must be written in Gherkin format, in English, and from a third-person perspective.\n"
-    "3.  **REQUIREMENT-DRIVEN TESTS:**\n"
-    "    - For each 'Scenario' in the context, create a detailed Gherkin test case that validates it.\n"
-    "    - For the 'Copys' table, create **ONLY TWO** consolidated test cases: one for all Spanish texts and one for all English texts.\n"
-    "    - For each 'Amplitude' event, create a specific test case to verify the event is triggered correctly.\n"
-    "4.  **BE SPECIFIC:** Use concrete actions and verifiable outcomes. Avoid generic steps.\n"
-    "5.  **TITLES:** Every scenario title must start with 'Validate' and be descriptive. **Do not just copy the scenario title from the context.**\n"
-    "6.  **STRICT JSON OUTPUT:** Your final output must be a SINGLE, valid JSON object with one key: `scenarios`, containing a list of objects with a `title` (string) and `steps` (a single string with newlines `\\n`)."
+    "You are a Senior QA Analyst focused on Acceptance Testing.\n"
+    "INPUT ANALYSIS RULES:\n"
+    "1. **FOCUS ON EXPECTED BEHAVIOR:** If the input is a Bug Report, IGNORE the 'Current Behavior' or 'Actual Result'. Do NOT write tests to reproduce the bug. Write tests to verify the **FIX** (the Expected Behavior).\n"
+    "2. **VALIDATION ONLY:** Your goal is to ensure the requirement works as intended.\n"
+    "\n"
+    "FORMATTING RULES:\n"
+    "1. **TITLES:** MUST start with the phrase **'Validate that'**. Example: 'Validate that the user is redirected to the app...'.\n"
+    "2. **NO LABELS:** Do NOT use prefixes like 'Bug:', 'Happy Path:', 'Edge Case:', or 'Scenario:'. Just the action.\n"
+    "3. **SCOPE:** Generate enough scenarios to cover the Expected Behavior fully (Positive flows and necessary validations).\n"
+    "4. **OUTPUT:** Single JSON object: {\"scenarios\": [{\"title\": \"...\", \"steps\": \"...\"}]}"
 )
 
 SYS_MSG_GENERATE_API_TESTS = (
-    "You are a meticulous QA Engineer specializing in backend and API testing. Your task is to analyze technical requirements and create specific API test cases.\n\n"
-    "**YOUR RULES:**\n"
-    "1.  **ANALYZE TECHNICAL DETAILS:** Focus on changes to services, endpoints, request bodies, and data structures. If the user provides Gherkin scenarios, adopt them directly. Ignore UI/UX aspects.\n"
-    "2.  **API GHERKIN:** Write scenarios in Gherkin format that describe API interactions.\n"
-    "3.  **VALIDATE CONTRACTS:** Create tests for changes like adding or deprecating fields.\n"
-    "4.  **NEGATIVE PATHS:** Create tests for potential errors.\n"
-    "5.  **STRICT JSON OUTPUT:** Your final output must be a SINGLE, valid JSON object with one key: `scenarios`, containing a list of objects with `title` and `steps`."
+    "You are a Backend QA Expert.\n"
+    "RULES:\n"
+    "1. FOCUS: Validate the API contract, successful responses (200/201), and expected error handling (400/404) defined in requirements.\n"
+    "2. TITLES: MUST start with **'Validate that'**.\n"
+    "3. OUTPUT: Single JSON object: {\"scenarios\": [{\"title\": \"...\", \"steps\": \"...\"}]}"
 )
 
-
-# --- Internal Helpers ---
-def _extract_first_json_object(s: str) -> Optional[str]:
-    start = s.find("{")
-    if start == -1: return None
-    depth = 0
-    for i, ch in enumerate(s[start:], start=start):
-        if ch == "{": depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0: return s[start : i + 1]
-    return None
-
-
-def _response_text(response: Any) -> str:
-    """Extracts consolidated text from the Gemini response object."""
-    if not response:
-        return ""
-    text_value = getattr(response, "text", None)
-    if isinstance(text_value, str) and text_value.strip():
-        return text_value
-    collected: List[str] = []
-    candidates = getattr(response, "candidates", None) or []
-    for candidate in candidates:
-        content = getattr(candidate, "content", None)
-        parts = getattr(content, "parts", None) if content else None
-        if not parts:
-            continue
-        for part in parts:
-            part_text = getattr(part, "text", None)
-            if isinstance(part_text, str) and part_text.strip():
-                collected.append(part_text)
-                continue
-            part_dict = None
-            if hasattr(part, "as_dict"):
-                part_dict = part.as_dict() or None
-            elif isinstance(part, dict):
-                part_dict = part
-            if not part_dict:
-                continue
-            text_part = part_dict.get("text")
-            if isinstance(text_part, str) and text_part.strip():
-                collected.append(text_part)
-                continue
-            json_part = part_dict.get("json")
-            if json_part is not None:
-                try:
-                    collected.append(json.dumps(json_part))
-                except TypeError:
-                    pass
-    if collected:
-        return "".join(collected)
-    if hasattr(response, "to_dict"):
-        as_dict = response.to_dict() or {}
-        text_part = as_dict.get("text")
-        if isinstance(text_part, str) and text_part.strip():
-            return text_part
-        for candidate in as_dict.get("candidates", []) or []:
-            content = (candidate or {}).get("content") or {}
-            for part in content.get("parts", []) or []:
-                if not isinstance(part, dict):
-                    continue
-                text_part = part.get("text")
-                if isinstance(text_part, str) and text_part.strip():
-                    return text_part
-                json_part = part.get("json")
-                if json_part is not None:
-                    try:
-                        return json.dumps(json_part)
-                    except TypeError:
-                        continue
-    return ""
-
-# --- Main Functions ---
+def _clean_json_text(text: str) -> str:
+    """Limpia bloques markdown ```json ... ```"""
+    if "```" in text:
+        lines = text.splitlines()
+        lines = [l for l in lines if not l.strip().startswith("```")]
+        return "\n".join(lines)
+    return text
 
 def llm_generate_scenarios(
     issue_key: str,
     summary: str,
     full_context: str,
-    max_tests: int = 15,
+    max_tests: int = 50, 
     system_prompt: str = SYS_MSG_GENERATE_SCENARIOS,
+    images: List[Dict] = None
 ) -> Tuple[List[Dict[str, str]], str]:
+    
+    if not client:
+        return [], "Error: Cliente de IA no configurado."
 
-    def fallback(reason: str) -> Tuple[List[Dict[str, str]], str]:
-        log.error(f"FALLBACK ACTIVATED for '{summary}': {reason}")
-        return [], reason
-
-    if not vertexai or not PROJECT_ID:
-        return fallback("Vertex AI SDK or GOOGLE_CLOUD_PROJECT_ID not available.")
-
-    # ---- Configuration and Models ----
-    TIMEOUT = int(os.getenv("LLM_TIMEOUT", "120"))
-    # --- The model name will now be read from .env ---
-    MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     
     try:
-        # --- Prompt Construction (text only) ---
-        prompt_parts: List[str] = [
-            f"--- START OF JIRA ISSUE CONTEXT ---\n**USER STORY SUMMARY:** {summary}\n\n{full_context}\n--- END OF JIRA ISSUE CONTEXT ---"
-        ]
-
-        # --- START OF LOGS ---
-        log.info(f"Context for '{issue_key}' has a size of {len(full_context)} characters.")
-        if len(full_context) > 1000000: # An example threshold, Flash has a large context but it's good to know if it's excessive
-            log.warning("Context size is very large, it could cause slowness or errors.")
-        # --- END OF LOGS ---
-
-        generation_config = {
-            "response_mime_type": "application/json",
-            "temperature": float(os.getenv("LLM_TEMPERATURE", "0.2")),
-            "max_output_tokens": int(os.getenv("LLM_MAX_OUTPUT_TOKENS", "2048")),
-        }
-        safety_settings = [
-            SafetySetting(category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=HarmBlockThreshold.BLOCK_NONE),
-            SafetySetting(category=HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=HarmBlockThreshold.BLOCK_NONE),
-            SafetySetting(category=HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=HarmBlockThreshold.BLOCK_NONE),
-            SafetySetting(category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=HarmBlockThreshold.BLOCK_NONE),
-        ]
-        
-        # --- Gemini API Call ---
-        log.info(f"Attempting to generate with model '{MODEL_NAME}' (timeout={TIMEOUT}s)...")
-        model = GenerativeModel(MODEL_NAME, system_instruction=system_prompt)
-        
-        call_started = time.time()
-        response = model.generate_content(
-            prompt_parts,
-            generation_config=generation_config,
-            safety_settings=safety_settings,
+        user_prompt = (
+            f"TASK: {issue_key}\n"
+            f"SUMMARY: {summary}\n"
+            f"CONTEXT:\n{full_context}\n\n"
+            "INSTRUCTION: Create Gherkin Test Cases to VALIDATE the Expected Behavior. "
+            "Ensure all titles start with 'Validate that'. Return JSON."
         )
-        elapsed_ms = int((time.time() - call_started) * 1000)
-
-        # --- START OF LOGS ---
-        log.info(f">>> Response received from Gemini in {elapsed_ms}ms.")
-        raw_text = _response_text(response)
-        log.debug(f"Gemini raw response: {raw_text[:500]}...") # Log the first 500 characters
-        # --- END OF LOGS ---
-
-        # --- Response Processing ---
-        if not raw_text.strip():
-            return fallback("Gemini response did not include usable text.")
-
-        try:
-            data = json.loads(raw_text)
-        except json.JSONDecodeError:
-            candidate = _extract_first_json_object(raw_text)
-            if not candidate:
-                return fallback(f"The response was not valid JSON. Content: {raw_text[:200]}...")
-            data = json.loads(candidate)
         
-        scenarios_from_llm = data.get("scenarios") or []
-        if not scenarios_from_llm:
-            return fallback("The JSON response did not contain the 'scenarios' key.")
-
-        processed_scenarios: List[Dict[str, str]] = []
-        for sc in scenarios_from_llm[:max_tests]:
-            title = (sc.get("title") or "Untitled").strip()
-            steps = sc.get("steps")
-            steps_str = "\n".join(steps) if isinstance(steps, list) else str(steps or "")
-            if title and steps_str:
-                processed_scenarios.append({"title": title, "steps": steps_str})
-
-        if not processed_scenarios:
-            return fallback("No valid scenarios found in the model's response.")
-
-        log.info(f"{len(processed_scenarios)} scenarios generated with Gemini.")
-        return processed_scenarios, "gemini"
-
-    except (google_exceptions.DeadlineExceeded, google_exceptions.RetryError) as e:
-        log.error(f"Timeout or retry error with model '{MODEL_NAME}': {e}")
-        return fallback(f"The call to Gemini exceeded the timeout.")
-    except Exception as e:
-        # --- START OF LOGS ---
-        log.error(f"Unexpected error with model '{MODEL_NAME}': {e}", exc_info=True)
-        # We try to get more error details if they are available
-        if hasattr(e, 'message'):
-            log.error(f"Error detail: {e.message}")
-        # --- END OF LOGS ---
-        return fallback(f"General exception: {e}")
-
-
-# --- The synchronization function ---
-def llm_compare_and_sync(
-    issue_key: str,
-    summary: str,
-    existing_tests: List[Dict[str, Any]],
-    new_scenarios: List[Dict[str, str]],
-) -> Dict[str, List[Dict[str, Any]]]:
-    
-    log.info("Synchronizing generated scenarios with existing tests...")
-    to_create: List[Dict[str, str]] = []
-    to_update: List[Dict[str, Any]] = []
-    existing_map: Dict[str, Dict[str, Any]] = {}
-    for test in existing_tests:
-        summary_text = test.get("summary", "")
-        norm = test.get("norm_title") or sanitize_title(issue_key, summary_text)
-        sig = test.get("signature")
-        if not sig:
-            gherkin = test.get("gherkin", "")
-            sig = make_signature(norm, gherkin) if gherkin else make_signature(norm, "")
-        test_fixed = {**test, "norm_title": norm, "signature": sig}
-        existing_map[norm] = test_fixed
-    new_map = {
-        sanitize_title(issue_key, sc["title"]): {
-            **sc,
-            "signature": make_signature(sanitize_title(issue_key, sc["title"]), sc["steps"]),
-        }
-        for sc in new_scenarios
-    }
-    for norm_title, new_data in new_map.items():
-        if norm_title not in existing_map:
-            to_create.append(new_data)
-        else:
-            existing_test = existing_map[norm_title]
-            if new_data["signature"] != existing_test["signature"]:
-                summary_parts = existing_test["summary"].split("|")
-                if len(summary_parts) > 1:
-                    new_summary = f"{summary_parts[0].strip()} | {summary_parts[1].strip()} | {new_data['title']}"
-                else:
-                    new_summary = f"{issue_key} | {new_data['title']}"
-                to_update.append(
-                    {
-                        "key": existing_test["key"],
-                        "summary": new_summary,
-                        "steps": new_data["steps"],
-                    }
+        # Preparamos el contenido (Texto + Imágenes si hay)
+        contents = [user_prompt]
+        if images:
+            for img in images:
+                contents.append(
+                    types.Part.from_bytes(data=img["data"], mime_type=img["mime_type"])
                 )
-    obsolete = [test for norm_title, test in existing_map.items() if norm_title not in new_map]
-    log.info(
-        f"Sync: {len(to_create)} to create, {len(to_update)} to update, {len(obsolete)} obsolete."
-    )
-    return {"to_create": to_create, "to_update": to_update, "obsolete": obsolete}
+        
+        # Llamamos a Gemini (¡El mismo código para Vertex o AI Studio!)
+        response = client.models.generate_content(
+            model=model_name,
+            contents=contents,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                response_mime_type="application/json",
+                temperature=0.2
+            )
+        )
+
+        clean_text = _clean_json_text(response.text)
+        data = json.loads(clean_text)
+        scenarios = data.get("scenarios", [])
+        
+        final_scenarios = []
+        for sc in scenarios[:max_tests]: 
+            t = sc.get("title", "Untitled").strip()
+            
+            lower_t = t.lower()
+            for prefix in ["bug:", "happy path:", "scenario:", "edge case:", "test case:"]:
+                if lower_t.startswith(prefix):
+                    t = t[len(prefix):].strip()
+            
+            if not t.lower().startswith("validate that"):
+                if t.lower().startswith("verify"):
+                    t = "Validate that" + t[6:]
+                elif t.lower().startswith("ensure"):
+                    t = "Validate that" + t[6:]
+                else:
+                    t = f"Validate that {t}"
+            
+            s = sc.get("steps", [])
+            s_str = "\n".join(s) if isinstance(s, list) else str(s)
+            
+            if t and s_str:
+                final_scenarios.append({"title": t, "steps": s_str})
+
+        log.info(f"✅ IA generó {len(final_scenarios)} tests de validación via {provider}.")
+        return final_scenarios, provider
+
+    except Exception as e:
+        log.error(f"Error LLM: {e}")
+        return [], str(e)
+
+def llm_compare_and_sync(issue_key: str, summary: str, existing_tests: list, new_scenarios: list) -> dict:
+    """
+    Compara los tests que ya existen con los que acaba de generar la IA
+    para decidir qué crear, qué actualizar y qué marcar como obsoleto.
+    """
+    plan = {
+        "to_create": [],
+        "to_update": [],
+        "obsolete": [],
+        "unchanged": []
+    }
+    
+    existing_map = {}
+    for t in existing_tests:
+        t_title = t.get("norm_title") or t.get("title") or t.get("summary") or ""
+        
+        if " | " in t_title:
+            t_title = t_title.split(" | ", 1)[-1].strip()
+            
+        existing_map[t_title.strip().lower()] = t
+        
+    matched_keys = set()
+    
+    for sc in new_scenarios:
+        sc_title = sc.get("title", "").strip()
+        sc_steps = sc.get("steps", "").strip()
+        
+        search_title = sc_title
+        if " | " in search_title:
+            search_title = search_title.split(" | ", 1)[-1].strip()
+            
+        match = existing_map.get(search_title.lower())
+        
+        if match:
+            matched_keys.add(match["key"])
+            match_steps = (match.get("gherkin") or match.get("steps") or match.get("description") or "").strip()
+            
+            if match_steps != sc_steps:
+                match_updated = match.copy()
+                match_updated["steps"] = sc_steps
+                plan["to_update"].append(match_updated)
+            else:
+                plan["unchanged"].append(match)
+        else:
+            plan["to_create"].append(sc)
+            
+    for t in existing_tests:
+        if t["key"] not in matched_keys:
+            plan["obsolete"].append(t)
+            
+    return plan

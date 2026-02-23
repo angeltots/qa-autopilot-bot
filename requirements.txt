@@ -1,10 +1,11 @@
-# src/requirements.txt
-
+# requirements.txt
+google-genai
 google-generativeai
+google-cloud-aiplatform
 requests
 python-dotenv
 mcp
 fastapi
 uvicorn
 pytest
-google-cloud-aiplatform
+discord.py
