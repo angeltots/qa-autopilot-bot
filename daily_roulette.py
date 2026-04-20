@@ -19,8 +19,7 @@ def get_mongo_client():
     return client[DB_NAME][COLLECTION_NAME]
 
 def get_team_members():
-    # Podés hardcodearlos acá o traerlos de otra colección de Mongo
-    return ["Persona 1", "Persona 2", "Persona 3", "Persona 4"]
+    return ["Juan Carlos Urquiza", "Catriel Caruso", "Angel Mendez", "Sol Gosso", "Luis Márquez", "Matias Camiletti", "Christian Ferrer"]
 
 def run_roulette():
     collection = get_mongo_client()
