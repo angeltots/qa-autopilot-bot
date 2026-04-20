@@ -46,8 +46,8 @@ Sigue estos pasos para configurar y ejecutar el bot en tu máquina local o servi
 2. Instalación
 Clona este repositorio:
 
-git clone https://github.com/tu-usuario/mcp-xray-python.git
-cd mcp-xray-python
+git clone https://github.com/angeltots/qa-autopilot-bot.git
+cd qa-autopilot-bot
 
 Crea y activa un entorno virtual:
 
