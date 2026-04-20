@@ -1,6 +1,7 @@
 # Entorno virtual
 venv/
 .venv/
+env/
 
 # Archivos de credenciales y configuración local
 .env
@@ -15,3 +16,12 @@ __pycache__/
 
 # (Si usas Mac)
 .DS_Store
+
+# Archivos de pruebas locales y auditorías (CSVs)
+*.csv
+kupyo_backup_before_update.csv
+kupyo_update_results.csv
+
+# Scripts de uso personal/local
+update_kupyo_video_urls.py
+validador.py

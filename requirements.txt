@@ -9,3 +9,8 @@ fastapi
 uvicorn
 pytest
 discord.py
+pymongo
+requests
+python-dotenv
+Flask
+pytz
