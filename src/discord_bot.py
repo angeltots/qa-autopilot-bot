@@ -190,10 +190,34 @@ async def ejecutar_ruleta_equipo(team_name):
 
     if free_meetings_day or not hay_daily:
         if canal_reportes:
-            embed = discord.Embed(title=f"🔇 Sin Daily hoy para {team_name}", color=0x95A5A6)
+            embed = discord.Embed(title=f"🔇 Sin Daily por llamada hoy para {team_name}", color=0x95A5A6)
             razon = "es Free Meetings Day" if free_meetings_day else "no se agendó la reunión en el calendario"
-            embed.description = f"Hoy no corremos la ruleta porque **{razon}**.\n\n¡Día libre de reuniones! Aprovechen para meterle a fondo al código/tasks 👨‍💻🚀"
-            await canal_reportes.send(embed=embed)
+            
+            embed.description = (
+                f"Hoy no tenemos reunión por llamada porque **{razon}**.\n\n"
+                "📝 **Por favor, dejen su reporte diario por escrito respondiendo en este canal.**\n"
+                "Comenten en qué status están sus tareas y si tienen algún blocker. 👇"
+            )
+            
+            # 1. Obtenemos a todos los integrantes de este equipo
+            integrantes = list(config["members"].keys())
+            
+            # 2. Filtramos SOLO a los que NO están en la lista de ausentes
+            presentes = [m for m in integrantes if m not in ausentes_dict]
+            
+            # 3. Armamos las menciones solo para los presentes
+            if presentes:
+                menciones = " ".join([get_mention(m, config["members"]) for m in presentes])
+                mensaje_ping = f"🔔 ¡Atención equipo! {menciones}"
+            else:
+                # Caso extremo: todos están de vacaciones/people day
+                mensaje_ping = "🔔 ¡Atención equipo! (Aunque parece que hoy todos están descansando 🌴)"
+            
+            # Enviamos el mensaje con las menciones
+            await canal_reportes.send(content=mensaje_ping, embed=embed)
+            guardar_log(f"Sin Daily ({team_name})", razon)
+        else:
+            print(f"⚠️ {team_name} cancelado por {razon}, pero no hay canal de reportes configurado.")
         return
 
     history = get_db_history(config["db_key"])
