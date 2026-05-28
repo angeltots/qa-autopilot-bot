@@ -1,7 +1,8 @@
 # requirements.txt
 google-genai
 google-generativeai
-google-cloud-aiplatform
+google-cloud-aiplatform>=1.38.0
+google-cloud-bigquery>=3.20.0
 requests
 python-dotenv
 mcp
@@ -10,7 +11,5 @@ uvicorn
 pytest
 discord.py
 pymongo
-requests
-python-dotenv
 Flask
 pytz
