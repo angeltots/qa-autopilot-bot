@@ -41,7 +41,6 @@ TEAMS = {
             "Catriel Caruso": "1311265389723783179",
             "Angel Mendez": "1362026774988591299",
             "Sol Gosso": "1184514902963015710",
-            "Luis Márquez": "1302037681227825215",
             "Matias Camiletti": "1043717500128481310",
             "Christian Ferrer": "1433452588183064658"
         }
