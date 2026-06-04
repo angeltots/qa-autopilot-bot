@@ -40,6 +40,7 @@ TEAMS = {
             "Juan Carlos Urquiza": "1460706682274451467",
             "Catriel Caruso": "1311265389723783179",
             "Angel Mendez": "1362026774988591299",
+            "Jhojan Reinoso": "1403019672500047994",
             "Sol Gosso": "1184514902963015710",
             "Matias Camiletti": "1043717500128481310",
             "Christian Ferrer": "1433452588183064658"
