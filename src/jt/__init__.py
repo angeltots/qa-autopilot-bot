@@ -67,7 +67,7 @@ def register_tools(mcp: Any):
     def diag_env() -> Dict[str, Any]:
         """Diagnóstico de conexiones (Jira y ClickUp)"""
         return {
-            "JIRA_BASE": J.JIRA_BASE,
+            "JIRA_URL": J.JIRA_URL,
             "CLICKUP_API_BASE": C.CLICKUP_API_BASE,
             "GOOGLE_CLOUD_PROJECT_ID": L.PROJECT_ID,
             "status": "ok"

@@ -4,9 +4,9 @@ import os
 
 load_dotenv()
 
-JIRA_EMAIL = os.environ.get("JIRA_EMAIL")
-JIRA_TOKEN = os.environ.get("JIRA_TOKEN") 
-JIRA_BASE = os.environ.get("JIRA_BASE")
+JIRA_USER = os.environ.get("JIRA_USER")
+JIRA_API_TOKEN = os.environ.get("JIRA_API_TOKEN")
+JIRA_URL = os.environ.get("JIRA_URL")
 DEFAULT_PROJECT_KEY = os.environ.get("DEFAULT_PROJECT_KEY")
 RELATES_LINK_TYPE = os.environ.get("RELATES_LINK_TYPE", "Relates")
 

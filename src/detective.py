@@ -4,7 +4,8 @@ import requests
 from dotenv import load_dotenv
 
 load_dotenv()
-API_KEY = os.getenv("CLICKUP_API_KEY")
+from core.config import CLICKUP_API_KEY
+API_KEY = CLICKUP_API_KEY
 
 def get_types():
     if not API_KEY:

@@ -10,7 +10,7 @@ load_dotenv()
 MONGO_URI = os.getenv('MONGO_URI') 
 DB_NAME = "daily_bot_db"
 COLLECTION_NAME = "history"
-DISCORD_TOKEN = os.getenv('DISCORD_BOT_TOKEN') # Usado por GitHub Actions
+DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 
 TEAMS = {
     "Kupyo": {

@@ -19,7 +19,8 @@ jobs:
 
       - name: Run Roulette
         env:
-          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-          DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
-          MONGO_URI: ${{ secrets.MONGO_URI }} 
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          DISCORD_CHANNEL_ID_KUPYO: ${{ secrets.DISCORD_CHANNEL_ID_KUPYO }}
+          DISCORD_CHANNEL_ID_HERALD: ${{ secrets.DISCORD_CHANNEL_ID_HERALD }}
+          MONGO_URI: ${{ secrets.MONGO_URI }}
         run: python daily_roulette.py
