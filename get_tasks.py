@@ -3,7 +3,7 @@ import os
 import asyncio
 from dotenv import load_dotenv
 
-TOKEN = os.getenv('DISCORD_TOKEN')
+TOKEN = os.getenv('CLICKUP_API_KEY')
 FOLDER_ID = "90144557518"
 
 headers = {"Authorization": TOKEN, "Content-Type": "application/json"}

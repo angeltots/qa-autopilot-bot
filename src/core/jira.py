@@ -11,7 +11,7 @@ from collections import defaultdict
 
 import requests
 
-from .config import JIRA_BASE, JIRA_EMAIL, JIRA_TOKEN, RELATES_LINK_TYPE
+from .config import JIRA_URL, JIRA_USER, JIRA_API_TOKEN, RELATES_LINK_TYPE
 from .adf import adf_to_text, adf_with_code_block, plain_to_adf
 from .gherkin import make_signature, sanitize_title
 
@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 def _auth_header() -> str:
     """Builds the Authorization header for Jira (Basic with API token)."""
     return "Basic " + base64.b64encode(
-        f"{JIRA_EMAIL}:{JIRA_TOKEN}".encode("utf-8")
+        f"{JIRA_USER}:{JIRA_API_TOKEN}".encode("utf-8")
     ).decode("utf-8")
 
 
@@ -35,7 +35,7 @@ def jira_request(
     Wrapper for Jira Cloud requests with a small backoff for 429/5xx errors.
     Returns {} if there is no body. Raises exception on definitive error.
     """
-    url = f"{JIRA_BASE.rstrip('/')}{path}"
+    url = f"{JIRA_URL.rstrip('/')}{path}"
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json",
