@@ -40,9 +40,9 @@ def test_sanitize_title(issue_key, raw_title, expected_output):
 
 def test_build_feature_single():
     """Tests that the .feature file content is built correctly.
-    
-    Note: gherkin.py capitalizes the first letter of the scenario title
-    after stripping the 'Validate that ' / 'Validate ' prefix.
+
+    Note: gherkin.py keeps the 'Validate that' / 'Validate' prefix as-is
+    (only capitalizes the first letter) instead of stripping it.
     """
     summary = "User Story Summary"
     issue_key = "PROJ-100"
@@ -50,13 +50,13 @@ def test_build_feature_single():
         "title": "Validate successful login",
         "steps": "Given I am on the login page\nWhen I enter valid credentials\nThen I am logged in"
     }
-    
+
     expected_feature_text = """
 @PROJ-100
 Feature: User Story Summary
   # Source: PROJ-100
 
-  Scenario: Successful login
+  Scenario: Validate successful login
     Given I am on the login page
     When I enter valid credentials
     Then I am logged in

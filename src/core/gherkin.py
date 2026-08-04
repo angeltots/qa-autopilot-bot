@@ -17,9 +17,10 @@ def build_feature_single(summary: str, issue_key: str, sc: Dict[str,str]) -> str
     """
     Builds the .feature file text for a single scenario.
     """
-    title = sc.get('title', 'Untitled Scenario')
-    # Sanitize the title within the scenario to remove "Validate"
-    scenario_title = title.replace("Validate ", "", 1)
+    title = (sc.get('title') or 'Untitled Scenario').strip() or "Untitled Scenario"
+    # Nos aseguramos de que la primera letra quede en mayúscula, sin tocar
+    # el prefijo "Validate that" (se mantiene tal cual llega del LLM).
+    scenario_title = title[0].upper() + title[1:]
     
     steps = sc.get('steps', '# No steps defined')
     
