@@ -6,7 +6,7 @@ import pytest
 # Add 'src' to the path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 
-from core.llm import llm_compare_and_sync
+from core.llm import llm_compare_and_sync, _normalize_scenario_title
 # We need these helpers from gherkin to create signatures
 from core.gherkin import make_signature, sanitize_title
 
@@ -107,3 +107,22 @@ def test_sync_complex_mixture():
     assert plan["to_create"][0]["title"] == "Validate Password Reset"
     assert plan["to_update"][0]["key"] == "TEST-2"
     assert plan["obsolete"][0]["key"] == "TEST-3"
+
+
+# --- Tests para _normalize_scenario_title ---
+@pytest.mark.parametrize("raw_title, expected_output", [
+    # Regression: "Verify that X" no debe duplicar "that"
+    (
+        "Verify that changing the aggregation method updates the value",
+        "Validate that changing the aggregation method updates the value",
+    ),
+    ("Ensure that the user is redirected", "Validate that the user is redirected"),
+    ("Verify the login works", "Validate that the login works"),
+    ("Ensure the login works", "Validate that the login works"),
+    ("Validate that the login works", "Validate that the login works"),
+    ("Bug: Verify that the fix works", "Validate that the fix works"),
+    ("Scenario: the user can log in", "Validate that the user can log in"),
+    (None, "Validate that Untitled"),
+])
+def test_normalize_scenario_title(raw_title, expected_output):
+    assert _normalize_scenario_title(raw_title) == expected_output

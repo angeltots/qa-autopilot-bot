@@ -57,6 +57,30 @@ def _clean_json_text(text: str) -> str:
         return "\n".join(lines)
     return text
 
+def _normalize_scenario_title(raw_title: str) -> str:
+    """Quita labels tipo 'Bug:'/'Scenario:' y fuerza el prefijo 'Validate that'."""
+    t = (raw_title or "Untitled").strip()
+
+    lower_t = t.lower()
+    for prefix in ["bug:", "happy path:", "scenario:", "edge case:", "test case:"]:
+        if lower_t.startswith(prefix):
+            t = t[len(prefix):].strip()
+            lower_t = t.lower()
+
+    if not lower_t.startswith("validate that"):
+        if lower_t.startswith("verify that"):
+            t = "Validate that" + t[len("verify that"):]
+        elif lower_t.startswith("verify"):
+            t = "Validate that" + t[len("verify"):]
+        elif lower_t.startswith("ensure that"):
+            t = "Validate that" + t[len("ensure that"):]
+        elif lower_t.startswith("ensure"):
+            t = "Validate that" + t[len("ensure"):]
+        else:
+            t = f"Validate that {t}"
+
+    return t
+
 def llm_generate_scenarios(
     issue_key: str,
     summary: str,
@@ -104,22 +128,9 @@ def llm_generate_scenarios(
         scenarios = data.get("scenarios", [])
         
         final_scenarios = []
-        for sc in scenarios[:max_tests]: 
-            t = sc.get("title", "Untitled").strip()
-            
-            lower_t = t.lower()
-            for prefix in ["bug:", "happy path:", "scenario:", "edge case:", "test case:"]:
-                if lower_t.startswith(prefix):
-                    t = t[len(prefix):].strip()
-            
-            if not t.lower().startswith("validate that"):
-                if t.lower().startswith("verify"):
-                    t = "Validate that" + t[6:]
-                elif t.lower().startswith("ensure"):
-                    t = "Validate that" + t[6:]
-                else:
-                    t = f"Validate that {t}"
-            
+        for sc in scenarios[:max_tests]:
+            t = _normalize_scenario_title(sc.get("title", "Untitled"))
+
             s = sc.get("steps", [])
             s_str = "\n".join(s) if isinstance(s, list) else str(s)
             
