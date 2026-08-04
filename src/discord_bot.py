@@ -112,6 +112,7 @@ def get_calendar_availability():
         return response.json()
     except Exception as e:
         print(f"🔥 Error Google Calendar: {e}")
+        guardar_log("Error Calendar API", str(e))
         return {}
 
 # ==========================================
@@ -170,9 +171,12 @@ async def ejecutar_ruleta_equipo(team_name):
     canal_equipo = bot.get_channel(int(config["channel_id"])) if config.get("channel_id") else None
     canal_reportes = bot.get_channel(int(config["report_channel_id"])) if config.get("report_channel_id") else None
     
-    if not canal_equipo: return
+    if not canal_equipo:
+        guardar_log(f"Canal no encontrado ({team_name})", f"channel_id={config.get('channel_id')}")
+        return
 
     cal_data = get_calendar_availability()
+    guardar_log(f"Calendar Data ({team_name})", str(cal_data))
     motivo_cancelacion = cal_data.get("motivo_cancelacion")
     free_meetings_day = cal_data.get("free_meetings_day", False)
     hay_daily = cal_data.get(config["calendar_key"], False)
@@ -230,11 +234,23 @@ async def ejecutar_ruleta_equipo(team_name):
     embed = discord.Embed(color=0x3498DB)
     embed.set_footer(text=f"Semana {current_week} • {today.strftime('%d/%m/%Y')}")
 
+    # Si no hay candidatos pero hay integrantes disponibles (no ausentes),
+    # significa que todos ya fueron seleccionados esta semana → reiniciar ciclo
     if not candidatos:
-        embed.title = f"⚠️ Sin candidatos en {team_name}"
-        embed.description = "Parece que hoy no hay nadie disponible para el sorteo."
-        await canal_equipo.send(embed=embed)
-    else:
+        disponibles = [m for m in integrantes if m not in ausentes_dict]
+        if disponibles:
+            guardar_log(f"Reset semanal ({team_name})", f"Pool agotado. this_week={history['this_week']}. Reiniciando ciclo.")
+            history["last_week"] = history["this_week"]
+            history["this_week"] = []
+            save_db_history(config["db_key"], history)
+            candidatos = disponibles
+        else:
+            embed.title = f"⚠️ Sin candidatos en {team_name}"
+            embed.description = "Parece que hoy no hay nadie disponible para el sorteo."
+            await canal_equipo.send(embed=embed)
+            return
+
+    if candidatos:
         prioridad = [m for m in candidatos if m not in history["last_week"]]
         principal = random.choice(prioridad) if prioridad else random.choice(candidatos)
         posibles_suplentes = [m for m in integrantes if m != principal and m not in ausentes_dict]
