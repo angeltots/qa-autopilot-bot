@@ -15,8 +15,9 @@ from dotenv import load_dotenv
 from core import clickup as C
 from core import llm as L
 from core import gherkin as G
-from core.clickup import find_test_case_type_id 
-from keep_alive import keep_alive  
+from core.clickup import find_test_case_type_id
+from core.discord_utils import chunk_message
+from keep_alive import keep_alive
 
 load_dotenv()
 
@@ -358,7 +359,12 @@ class DestinationSelect(Select):
                 res = await asyncio.to_thread(C.create_test_task, self.task_id, f"TC{i:02d} | {self.task_id} | {sc['title']}", G.build_feature_single(self.task_data["summary"], self.task_id, sc), list_id)
                 links.append(f"• [`TC{i:02d}`]({res.get('url')}) {sc['title']}")
 
-            await msg.edit(content=f"🎉 **Tests creados para: {self.task_data['summary']}**\n\n" + "\n".join(links))
+            header = f"🎉 **Tests creados para: {self.task_data['summary']}**\n"
+            chunks = chunk_message(header, links)
+            if chunks:
+                await msg.edit(content=chunks[0])
+                for chunk in chunks[1:]:
+                    await self.ctx.send(chunk)
         except Exception as e: await self.ctx.send(f"🔥 Error: {e}")
 
 @bot.command(name="clickup")
