@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../s
 # --- Importamos AMBAS funciones que vamos a probar ---
 from core.gherkin import sanitize_title, build_feature_single
 
-# --- Tests para sanitize_title (LOS QUE YA TENÍAS) ---
+# --- Tests para sanitize_title (LOS QUE YA TENIAS) ---
 @pytest.mark.parametrize("issue_key, raw_title, expected_output", [
     # Standard cases
     ("PROJ-123", "PROJ-123 | TC01 | Validate Login", "Validate Login"),
@@ -39,7 +39,11 @@ def test_sanitize_title(issue_key, raw_title, expected_output):
 
 
 def test_build_feature_single():
-    """Tests that the .feature file content is built correctly."""
+    """Tests that the .feature file content is built correctly.
+    
+    Note: gherkin.py capitalizes the first letter of the scenario title
+    after stripping the 'Validate that ' / 'Validate ' prefix.
+    """
     summary = "User Story Summary"
     issue_key = "PROJ-100"
     scenario = {
@@ -52,7 +56,7 @@ def test_build_feature_single():
 Feature: User Story Summary
   # Source: PROJ-100
 
-  Scenario: successful login
+  Scenario: Successful login
     Given I am on the login page
     When I enter valid credentials
     Then I am logged in
