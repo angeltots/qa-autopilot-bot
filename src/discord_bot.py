@@ -33,9 +33,7 @@ TEAMS = {
         "calendar_key": "daily_kupyo",
         "mensaje_cumple": "✨ **¡Feliz nivel nuevo {mencion}!** 🎂🚀 Todos en **Kupyo** deseamos que tengas un gran día y lo pases increíble.",
         "members": {
-            "Catriel Caruso": "1311265389723783179",
             "Angel Mendez": "1362026774988591299",
-            "Jhojan Reinoso": "1403019672500047994",
             "Sol Gosso": "1184514902963015710",
             "Matias Camiletti": "1043717500128481310",
             "Christian Ferrer": "1433452588183064658"
@@ -50,6 +48,7 @@ TEAMS = {
         "members": {
             "Juan Cruz Carvallo": "1170912463852675213",
             "Francisco Dennehy": "1194998607238140017",
+            "Álvaro Enuel Serein": "1070354377195401350",
             "Alejandro Moran": "1341143520173494292",
             "Angel Mendez": "1362026774988591299"
         }
