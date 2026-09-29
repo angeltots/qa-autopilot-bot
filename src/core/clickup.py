@@ -80,6 +80,39 @@ def get_lists_in_folder(folder_id: str) -> List[dict]:
     data = clickup_request("GET", f"/folder/{folder_id}/list")
     return data.get("lists", [])
 
+def _find_testing_repository_folder(space_id: str) -> Optional[dict]:
+    folders = get_folders_in_space(space_id)
+    for f in folders:
+        if "testing" in f["name"].lower() and "repository" in f["name"].lower():
+            return f
+    return None
+
+
+def find_or_create_module_list(space_id: str, module_name: str) -> str:
+    """Find the list matching module_name inside Testing Repository, or create it."""
+    folder = _find_testing_repository_folder(space_id)
+    if not folder:
+        raise ValueError(
+            f"No 'Testing Repository' folder found in space {space_id}. "
+            "Create it manually in ClickUp first."
+        )
+
+    lists = get_lists_in_folder(folder["id"])
+    for lst in lists:
+        if lst["name"].strip().lower() == module_name.strip().lower():
+            log.info(f"Found existing list '{lst['name']}' (ID: {lst['id']})")
+            return lst["id"]
+
+    log.info(f"List '{module_name}' not found — creating it in '{folder['name']}'...")
+    data = clickup_request(
+        "POST", f"/folder/{folder['id']}/list",
+        body={"name": module_name.capitalize()}
+    )
+    new_id = data.get("id")
+    log.info(f"Created list '{module_name}' with ID: {new_id}")
+    return new_id
+
+
 def get_testing_lists() -> List[Dict[str, str]]:
     options = []
     for project_name, space_id in CLICKUP_SPACES.items():
@@ -113,6 +146,25 @@ def get_task_images(task_id: str) -> List[Dict[str, Any]]:
                     image_data.append({"mime_type": att.get("type"), "data": img_resp.content, "name": att.get("name")})
         return image_data
     except Exception: return []
+
+def get_doc_content(doc_id: str) -> str:
+    """Fetch all text content from a ClickUp Doc (all pages concatenated)."""
+    try:
+        data = clickup_request("GET", f"/doc/{doc_id}/page")
+        pages = data.get("pages", [])
+        parts = []
+        for page in pages:
+            name = page.get("name", "")
+            content = page.get("content", "") or page.get("html_content", "") or ""
+            if name:
+                parts.append(f"## {name}\n{content}")
+            elif content:
+                parts.append(content)
+        return "\n\n".join(parts)
+    except Exception as e:
+        log.error(f"Failed to fetch doc {doc_id}: {e}")
+        return ""
+
 
 def get_task(task_id: str) -> dict:
     try:
@@ -148,7 +200,8 @@ def create_test_task(parent_task_id: str, summary: str, gherkin: str, list_id: s
     new_task_id = data.get("id")
     task_url = f"https://app.clickup.com/t/{new_task_id}"
     
-    try: clickup_request("POST", f"/task/{parent_task_id}/link/{new_task_id}")
-    except: pass
+    if parent_task_id:
+        try: clickup_request("POST", f"/task/{parent_task_id}/link/{new_task_id}")
+        except: pass
 
     return {"ok": True, "key": new_task_id, "url": task_url}

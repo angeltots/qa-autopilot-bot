@@ -318,9 +318,10 @@ async def tarea_cumples_fin_de_semana_error(error):
 async def on_ready():
     print(f'🚀 Bot Listo: {bot.user}')
     for team_name in TEAMS.keys(): bot.add_view(VistaRuleta(team_name))
-    if not tarea_herald.is_running(): tarea_herald.start()
-    if not tarea_kupyo.is_running(): tarea_kupyo.start()
-    if not tarea_cumples_fin_de_semana.is_running(): tarea_cumples_fin_de_semana.start()
+    # Tareas programadas desactivadas (migradas a qa-autopilot-bot)
+    # if not tarea_herald.is_running(): tarea_herald.start()
+    # if not tarea_kupyo.is_running(): tarea_kupyo.start()
+    # if not tarea_cumples_fin_de_semana.is_running(): tarea_cumples_fin_de_semana.start()
 # ==========================================
 # COMANDOS MANUALES Y QA AUTOPILOT
 # ==========================================
